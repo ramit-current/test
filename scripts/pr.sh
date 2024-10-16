@@ -100,10 +100,12 @@ Commit()
 {
     echo "Commit Start"
     git add -A
-    if ! git commit --allow-empty;
+    if [ -z "$(git status --porcelain)" ] # If file changes empty or null then do nothing
     then
-        exit $?
+        echo "Nothing to commit"
+        return
     fi
+    git commit
     echo "Commit End"
 }
 

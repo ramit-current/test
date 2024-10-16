@@ -81,7 +81,7 @@ SquashCommits()
 
     # We don't want to rewrite history if the branch exists on remote, so squash against
     # remote branch, otherwise against the base branch
-    if git ls-remote --exit-code --heads git@github.com:finco-services/android.git refs/heads/$current
+    if git ls-remote --exit-code --heads git@github.com:ramit-current/test.git refs/heads/$current
     then
         against="$REMOTE/$current"
     else
@@ -94,6 +94,7 @@ SquashCommits()
         exit $?
     fi
     echo "SquashCommits End"
+    exit
 }
 
 Commit()

@@ -1,17 +1,17 @@
 #!/bin/bash
+
 # Constants
 REMOTE="origin"
 RESTRICTED_BRANCHES=("develop")
 REVIEWERS=(StephenMilone currentraghavkishan lewis-current kevin-current AVSEQ00 ramit-current)
 
 # Variables
-CreatingPR=true
+CreatingPr=false
 BaseBranch="develop"
 RunLintCheck=true
 SquashCommits=true
-KeepCurrentBranchAfterPR=false
+KeepCurrentBranchAfterPr=false
 
-# Help
 Help()
 {
     echo "
@@ -25,7 +25,14 @@ Including
 - create PR on GitHub. GitHub CLI should be installed and authenticated
 - checkout BaseBranch and delete branch from which PR was created
 
-Override for the defaults can be provided via a pr.properties txt file in the same directory
+Override for the defaults can be provided via a pr.properties txt file in the project's root directory or via input flags to the script
+
+l    Skip lint checks
+s    Skip squashing commits
+k    Keep the current branch and don't checkout BaseBranch after PR
+b    Set the BaseBranch var to squash commits and create PR against
+
+Branch for an existing PR can be checked out by using the input flag p
 
 Example pr.properties file
 
@@ -33,16 +40,6 @@ base_branch=feature-test
 squash_commits=false
 lint_check=false
 keep_current_branch_after_pr=true
-
-Or via input flags to the script
-
-l    Skip lint checks
-s    Skip squashing commits
-k    Keep the current branch and don't checkout BaseBranch after PR
-b    Set the BaseBranch var to squash commits and create PR against
-u    Update the existing PR. Commits are squashed against current branch's remote branch
-
-Branch for an existing PR can be checked out by using the input flag p
 
 To use
 - install GitHub cli
@@ -52,29 +49,22 @@ To use
 - [Do If Still Getting Authentication Error] create ssh key for GitHub cli, run gh auth login and select the created key this time
 
 Examples
-./pr.sh
-Create PR
+./scripts/pr.sh
+Create or update PR
 
-./pr.sh -u
-Update PR by pushing changes to the PR branch
+./scripts/pr.sh -s
+Create or update PR but skip squashing commits
 
-./pr.sh -s
-Create PR but skip squashing commits
-
-./pr.sh -us
-Update PR but skip squashing commits
-
-./pr.sh -b feature-test
+./scripts/pr.sh -b feature-test
 Create PR against feature-test branch
 
-./pr.sh -k
-Create PR and keep the PR branch
+./scripts/pr.sh -k
+Create or update PR and keep the PR branch
 
-./pr.sh -p 999
+./scripts/pr.sh -p 999
 Checkout the remote branch associated with the PR number 999"
 }
 
-# LintCheck
 LintCheck()
 {
     echo "LintCheck Start"
@@ -85,7 +75,6 @@ LintCheck()
     echo "LintCheck End"
 }
 
-# SquashCommits
 SquashCommits()
 {
     current=$(git branch --show-current)
@@ -96,7 +85,7 @@ SquashCommits()
         against=$BaseBranch
     fi
 
-    echo "SquashCommits Start against $against    
+    echo "SquashCommits Start against $against
     Squashing all WIP commits in $current"
     if ! git reset "$(git merge-base "$against" "$current")";
     then
@@ -105,7 +94,6 @@ SquashCommits()
     echo "SquashCommits End"
 }
 
-# Commit
 Commit()
 {
     echo "Commit Start"
@@ -117,7 +105,6 @@ Commit()
     echo "Commit End"
 }
 
-# Push
 Push()
 {
     echo "Push Start"
@@ -129,10 +116,9 @@ Push()
     echo "Push End"
 }
 
-# Create PR
-CreatePR()
+CreatePr()
 {
-    echo "CreatePR Start"
+    echo "CreatePr Start"
     command="gh pr create --fill --base $BaseBranch"
 
     for reviewer in "${REVIEWERS[@]}"
@@ -141,10 +127,9 @@ CreatePR()
     done
 
     $command
-    echo "CreatePR End"
+    echo "CreatePr End"
 }
 
-# Checkout BaseBranch and delete current branch after PR
 CheckoutBaseBranchDeleteCurrent()
 {
     current=$(git branch --show-current)
@@ -155,7 +140,7 @@ CheckoutBaseBranchDeleteCurrent()
     elif ! CheckCurrentBranchRestricted;
     then
         return
-    elif [ "$KeepCurrentBranchAfterPR" = true ]
+    elif [ "$KeepCurrentBranchAfterPr" = true ]
     then
         return
     fi
@@ -175,7 +160,6 @@ CheckoutBaseBranchDeleteCurrent()
     echo "CheckoutBaseBranchDeleteCurrent End"
 }
 
-# Checkout branch for PR number
 CheckoutBranchForPr()
 {
     if [ "$#" -ne 1 ]
@@ -202,7 +186,6 @@ CheckoutBranchForPr()
     fi
 }
 
-# Check if current branch is restricted
 CheckCurrentBranchRestricted()
 {
     return_value=0
@@ -218,47 +201,84 @@ CheckCurrentBranchRestricted()
     return "$return_value"
 }
 
-# SetVars
 SetVars()
 {
     echo "SetVars Start"
 
+    # Check if PR exists for current branch
+    if ! pr_view_output=$(gh pr view 2>&1)
+    then
+        error_code=$?
+        # If output contains "no pull requests" it means we're creating a PR
+        if [[ $pr_view_output == *"no pull requests"* ]];
+        then
+            CreatingPr=true
+        # Some other error occurred
+        else
+            echo $pr_view_output
+            exit $error_code
+        fi
+    fi
+
     file="./pr.properties"
 
     function prop {
-        grep "${1}" ${file} | cut -d'=' -f2
+      if [ ! -f $file ]; then
+          echo ''
+      else
+          grep "${1}" ${file} | cut -d'=' -f2
+      fi
     }
 
-    # Set only if no value was provided as script input
-    if [ -z "$Input_BaseBranch" ]
+    # Override script default with script input, if not provided override with value in properties
+    if [ -n "$Input_BaseBranch" ]
+    then
+        BaseBranch=$Input_BaseBranch
+    elif [ -n "$(prop 'base_branch')" ]
     then
         BaseBranch=$(prop 'base_branch')
-    else
-        BaseBranch=$Input_BaseBranch
     fi
 
-    if [ -z "$Input_RunLintCheck" ]
+    if [ -n "$Input_RunLintCheck" ]
+    then
+        RunLintCheck=$Input_RunLintCheck
+    elif [ -n "$(prop 'lint_check')" ]
     then
         RunLintCheck=$(prop 'lint_check')
-    else
-        RunLintCheck=$Input_RunLintCheck
     fi
 
-    if [ -z "$Input_SquashCommits" ]
+    if [ -n "$Input_SquashCommits" ]
+    then
+        SquashCommits=$Input_SquashCommits
+    elif [ -n "$(prop 'squash_commits')" ]
     then
         SquashCommits=$(prop 'squash_commits')
-    else
-        SquashCommits=$Input_SquashCommits
     fi
 
-    if [ -z "$Input_KeepCurrentBranchAfterPR" ]
+    if [ -n "$Input_KeepCurrentBranchAfterPr" ]
     then
-        KeepCurrentBranchAfterPR=$(prop 'keep_current_branch_after_pr')
-    else
-        KeepCurrentBranchAfterPR=$Input_KeepCurrentBranchAfterPR
+        KeepCurrentBranchAfterPr=$Input_KeepCurrentBranchAfterPr
+    elif [ -n "$(prop 'keep_current_branch_after_pr')" ]
+    then
+        KeepCurrentBranchAfterPr=$(prop 'keep_current_branch_after_pr')
     fi
 
-    echo "SetVars End"
+    bold=$(tput bold)
+    normal=$(tput sgr0)
+    creating_pr_text="creating"
+    if [ "$CreatingPr" = false ]
+    then
+        creating_pr_text="updating"
+    fi
+
+    echo "
+${normal}BaseBranch: ${bold}$BaseBranch
+${normal}Creating or Updating PR: ${bold}$creating_pr_text
+${normal}LintCheck: ${bold}$RunLintCheck
+${normal}Squash: ${bold}$SquashCommits
+${normal}KeepCurrentBranchAfterPR: ${bold}$KeepCurrentBranchAfterPr
+
+${normal}SetVars End"
 }
 
 Run()
@@ -278,7 +298,7 @@ Run()
 
     if [ "$SquashCommits" = true ]
     then
-        if [ "$CreatingPR" = true ]
+        if [ "$CreatingPr" = true ]
         then
             SquashCommits "$BaseBranch"
         else
@@ -290,23 +310,20 @@ Run()
 
     Push
 
-    if [ "$CreatingPR" = true ]
+    if [ "$CreatingPr" = true ]
     then
-        CreatePR
+        CreatePr
     fi
 
     CheckoutBaseBranchDeleteCurrent
 }
 
 # Main program
-while getopts "hulskb:p:" option; do
+while getopts "hlskb:p:" option; do
     case $option in
         h)
             Help
             exit;;
-
-        u)
-            CreatingPR=false;;
 
         l)
             Input_RunLintCheck=false;;
@@ -315,7 +332,7 @@ while getopts "hulskb:p:" option; do
             Input_SquashCommits=false;;
 
         k)
-            Input_KeepCurrentBranchAfterPR=true;;
+            Input_KeepCurrentBranchAfterPr=true;;
 
         b)
             Input_BaseBranch=$OPTARG;;

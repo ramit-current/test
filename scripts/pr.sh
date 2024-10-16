@@ -78,15 +78,17 @@ LintCheck()
 SquashCommits()
 {
     current=$(git branch --show-current)
-    if [ "$#" -ne 1 ]
+
+    # We don't want to rewrite history if the branch exists on remote, so squash against
+    # remote branch, otherwise against the base branch
+    if git ls-remote --exit-code --heads git@github.com:finco-services/android.git refs/heads/$current
     then
         against="$REMOTE/$current"
     else
         against=$BaseBranch
     fi
 
-    echo "SquashCommits Start against $against
-    Squashing all WIP commits in $current"
+    echo "SquashCommits Start against $against"
     if ! git reset "$(git merge-base "$against" "$current")";
     then
         exit $?
@@ -98,7 +100,7 @@ Commit()
 {
     echo "Commit Start"
     git add -A
-    if ! git commit;
+    if ! git commit --allow-empty;
     then
         exit $?
     fi
@@ -298,12 +300,7 @@ Run()
 
     if [ "$SquashCommits" = true ]
     then
-        if [ "$CreatingPr" = true ]
-        then
-            SquashCommits "$BaseBranch"
-        else
-            SquashCommits
-        fi
+        SquashCommits
     fi
 
     Commit

@@ -81,7 +81,7 @@ SquashCommits()
 
     # We don't want to rewrite history if the branch exists on remote, so squash against
     # remote branch, otherwise against the base branch
-    if git ls-remote --exit-code --heads git@github.com:ramit-current/test.git refs/heads/$current
+    if git ls-remote --exit-code --heads git@github.com:finco-services/android.git refs/heads/$current
     then
         against="$REMOTE/$current"
     else
@@ -100,12 +100,16 @@ Commit()
 {
     echo "Commit Start"
     git add -A
-    if [ -z "$(git status --porcelain)" ] # If file changes empty or null then do nothing
+    if [ -z "$(git status --porcelain)" ]
     then
         echo "Nothing to commit"
+        echo "Commit End"
         return
     fi
-    git commit
+    if ! git commit;
+    then
+        exit $?
+    fi
     echo "Commit End"
 }
 
@@ -123,7 +127,7 @@ Push()
 CreatePr()
 {
     echo "CreatePr Start"
-    command="gh pr create --fill --base $BaseBranch"
+    command="gh pr create --fill --base $BaseBranch --assignee @me"
 
     for reviewer in "${REVIEWERS[@]}"
     do
@@ -210,7 +214,7 @@ SetVars()
     echo "SetVars Start"
 
     # Check if PR exists for current branch
-    if ! pr_view_output=$(gh pr view 2>&1)
+    if ! pr_view_output=$(gh pr view --json state --template '{{ .state }}' 2>&1)
     then
         error_code=$?
         # If output contains "no pull requests" it means we're creating a PR
@@ -221,6 +225,12 @@ SetVars()
         else
             echo $pr_view_output
             exit $error_code
+        fi
+    else
+        if [ $pr_view_output == "CLOSED" ] || [ $pr_view_output == "MERGED" ]
+        then
+            echo "Previous PR for the same branch merged or closed, can create PR"
+            CreatingPr=true
         fi
     fi
 

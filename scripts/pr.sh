@@ -3,7 +3,7 @@
 # Constants
 REMOTE="origin"
 RESTRICTED_BRANCHES=("develop")
-REVIEWERS=(StephenMilone currentraghavkishan lewis-current kevin-current AVSEQ00 ramit-current)
+REVIEWERS=(ramitsuri)
 
 # Variables
 CreatingPr=false
@@ -11,6 +11,9 @@ BaseBranch="develop"
 RunLintCheck=true
 SquashCommits=true
 KeepCurrentBranchAfterPr=false
+RunTests=false
+Draft=false
+ReadyFromDraft=false
 
 Help()
 {
@@ -19,6 +22,7 @@ This script will automate most of the PR create/update process for an Android pr
 Including
 
 - running lint check
+- running tests
 - squashing commits against BaseBranch var when creating a PR or against the remote branch when updating it
 - commit changes. Will ask for commit message
 - push changes to remote
@@ -31,6 +35,9 @@ l    Skip lint checks
 s    Skip squashing commits
 k    Keep the current branch and don't checkout BaseBranch after PR
 b    Set the BaseBranch var to squash commits and create PR against
+t    Run tests when creating or updating PR
+d    Create PR in draft mode
+r    Mark draft PR ready
 
 Branch for an existing PR can be checked out by using the input flag p
 
@@ -40,6 +47,8 @@ base_branch=feature-test
 squash_commits=false
 lint_check=false
 keep_current_branch_after_pr=true
+tests=true
+draft_pr=true
 
 To use
 - install GitHub cli
@@ -81,7 +90,7 @@ SquashCommits()
 
     # We don't want to rewrite history if the branch exists on remote, so squash against
     # remote branch, otherwise against the base branch
-    if git ls-remote --exit-code --heads git@github.com:ramit-current/test.git refs/heads/$current
+    if git ls-remote --exit-code --heads git@github.com:ramit-current/test.git refs/heads/"$current"
     then
         against="$REMOTE/$current"
     else
@@ -100,12 +109,16 @@ Commit()
 {
     echo "Commit Start"
     git add -A
-    if [ -z "$(git status --porcelain)" ] # If file changes empty or null then do nothing
+    if [ -z "$(git status --porcelain)" ]
     then
         echo "Nothing to commit"
+        echo "Commit End"
         return
     fi
-    git commit
+    if ! git commit;
+    then
+        exit $?
+    fi
     echo "Commit End"
 }
 
@@ -123,15 +136,37 @@ Push()
 CreatePr()
 {
     echo "CreatePr Start"
-    command="gh pr create --fill --base $BaseBranch"
-
-    for reviewer in "${REVIEWERS[@]}"
-    do
-        command="$command --reviewer $reviewer"
-    done
+    command="gh pr create --fill --base $BaseBranch --assignee @me"
+    if [ "$Draft" = true ]
+    then
+        command="$command --draft"
+    else
+        for reviewer in "${REVIEWERS[@]}"
+        do
+            command="$command --reviewer $reviewer"
+        done
+    fi
 
     $command
     echo "CreatePr End"
+}
+
+ReadyPr()
+{
+    echo "ReadyPr Start"
+    if ! gh pr ready;
+    then
+        exit $?
+    fi
+
+    command="gh pr edit"
+    for reviewer in "${REVIEWERS[@]}"
+    do
+       command="$command --add-reviewer $reviewer"
+    done
+
+    $command
+    echo "ReadyPr End"
 }
 
 CheckoutBaseBranchDeleteCurrent()
@@ -205,12 +240,30 @@ CheckCurrentBranchRestricted()
     return "$return_value"
 }
 
+Tests()
+{
+    # If changing this list, update <project_root>/build-tools/cloud/scripts/cloud_run_unit_tests.sh as well
+    test_commands=(
+        app:testInternalDebugUnitTest
+        common:testDebugUnitTest
+        core:testDebugUnitTest
+        data-models:testDebugUnitTest
+        vde-sdk:testDebugUnitTest
+        ui-components:testDebugUnitTest
+    )
+
+    for c in "${test_commands[@]}"
+    do
+        ./gradlew "$c"
+    done
+}
+
 SetVars()
 {
     echo "SetVars Start"
 
     # Check if PR exists for current branch
-    if ! pr_view_output=$(gh pr view 2>&1)
+    if ! pr_view_output=$(gh pr view --json state --template '{{ .state }}' 2>&1)
     then
         error_code=$?
         # If output contains "no pull requests" it means we're creating a PR
@@ -219,8 +272,14 @@ SetVars()
             CreatingPr=true
         # Some other error occurred
         else
-            echo $pr_view_output
+            echo "$pr_view_output"
             exit $error_code
+        fi
+    else
+        if [ "$pr_view_output" == "CLOSED" ] || [ "$pr_view_output" == "MERGED" ]
+        then
+            echo "Previous PR for the same branch merged or closed, can create PR"
+            CreatingPr=true
         fi
     fi
 
@@ -267,6 +326,27 @@ SetVars()
         KeepCurrentBranchAfterPr=$(prop 'keep_current_branch_after_pr')
     fi
 
+    if [ -n "$Input_RunTests" ]
+    then
+        RunTests=$Input_RunTests
+    elif [ -n "$(prop 'tests')" ]
+    then
+        RunTests=$(prop 'tests')
+    fi
+
+    if [ -n "$Input_Draft" ]
+    then
+        Draft=$Input_Draft
+    elif [ -n "$(prop 'draft_pr')" ]
+    then
+        Draft=$(prop 'draft_pr')
+    fi
+
+    if [ "$Draft" = true ]
+    then
+        ReadyFromDraft=false
+    fi
+
     bold=$(tput bold)
     normal=$(tput sgr0)
     creating_pr_text="creating"
@@ -281,6 +361,7 @@ ${normal}Creating or Updating PR: ${bold}$creating_pr_text
 ${normal}LintCheck: ${bold}$RunLintCheck
 ${normal}Squash: ${bold}$SquashCommits
 ${normal}KeepCurrentBranchAfterPR: ${bold}$KeepCurrentBranchAfterPr
+${normal}RunTests: ${bold}$RunTests
 
 ${normal}SetVars End"
 }
@@ -300,6 +381,11 @@ Run()
         LintCheck
     fi
 
+    if [ "$RunTests" = true ]
+    then
+        Tests
+    fi
+
     if [ "$SquashCommits" = true ]
     then
         SquashCommits
@@ -312,13 +398,16 @@ Run()
     if [ "$CreatingPr" = true ]
     then
         CreatePr
+    elif [ "$ReadyFromDraft" = true ]
+    then
+        ReadyPr
     fi
 
     CheckoutBaseBranchDeleteCurrent
 }
 
 # Main program
-while getopts "hlskb:p:" option; do
+while getopts "hlsktdrb:p:" option; do
     case $option in
         h)
             Help
@@ -332,6 +421,17 @@ while getopts "hlskb:p:" option; do
 
         k)
             Input_KeepCurrentBranchAfterPr=true;;
+
+        t)
+            Input_RunTests=true;;
+
+        d)
+            Draft=true
+            ReadyFromDraft=false;;
+
+        r)
+            Draft=false
+            ReadyFromDraft=true;;
 
         b)
             Input_BaseBranch=$OPTARG;;

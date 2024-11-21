@@ -426,10 +426,12 @@ while getopts "hlsktdrb:p:" option; do
             Input_RunTests=true;;
 
         d)
+            echo "d"
             Draft=true
             ReadyFromDraft=false;;
 
         r)
+            echo "r"
             Draft=false
             ReadyFromDraft=true;;
 

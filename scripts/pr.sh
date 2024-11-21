@@ -349,10 +349,22 @@ SetVars()
 
     bold=$(tput bold)
     normal=$(tput sgr0)
-    creating_pr_text="creating"
-    if [ "$CreatingPr" = false ]
+
+    if [ "$CreatingPr" = true ]
     then
-        creating_pr_text="updating"
+        if [ "$Draft" = true ]
+        then
+            creating_pr_text="creating in draft mode"
+        else
+            creating_pr_text="creating"
+        fi
+    else
+        if [ "$ReadyFromDraft" = true ]
+        then
+            creating_pr_text="updating and marking as ready"
+        else
+            creating_pr_text="updating"
+        fi
     fi
 
     echo "

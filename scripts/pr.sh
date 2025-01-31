@@ -266,8 +266,9 @@ SetVars()
 {
     echo "SetVars Start"
 
+
     # Check if PR exists for current branch
-    if ! pr_view_output=$(gh pr view --json state --template '{{ .state }}' 2>&1)
+    if ! pr_view_output=$(gh pr view --json state,baseRefName --template '{{ .state }};;;{{ .baseRefName }}' 2>&1)
     then
         error_code=$?
         # If output contains "no pull requests" it means we're creating a PR
@@ -280,10 +281,17 @@ SetVars()
             exit $error_code
         fi
     else
-        if [ "$pr_view_output" == "CLOSED" ] || [ "$pr_view_output" == "MERGED" ]
+        status_base_branch=(${pr_view_output//;;;/ })
+        status=${status_base_branch[0]}
+
+        if [ "$status" == "CLOSED" ] || [ "$status" == "MERGED" ]
         then
             echo "Previous PR for the same branch merged or closed, can create PR"
             CreatingPr=true
+        else
+            pr_base_branch=${status_base_branch[1]}
+            echo "Updating PR, will use base branch of the PR: $pr_base_branch"
+            CreatingPr=false
         fi
     fi
 
@@ -298,7 +306,10 @@ SetVars()
     }
 
     # Override script default with script input, if not provided override with value in properties
-    if [ -n "$Input_BaseBranch" ]
+    if [ -n "$pr_base_branch" ]
+    then
+        BaseBranch=$pr_base_branch
+    elif [ -n "$Input_BaseBranch" ]
     then
         BaseBranch=$Input_BaseBranch
     elif [ -n "$(prop 'base_branch')" ]

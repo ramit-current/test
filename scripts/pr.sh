@@ -15,6 +15,7 @@ KeepCurrentBranchAfterPr=false
 RunTests=false
 Draft=false
 ReadyFromDraft=false
+ExitEarly=false
 
 Help()
 {
@@ -37,8 +38,8 @@ s    Skip squashing commits
 k    Keep the current branch and don't checkout BaseBranch after PR
 b    Set the BaseBranch var to squash commits and create PR against
 t    Run tests when creating or updating PR
-d    Create PR in draft mode
-r    Mark draft PR ready
+d    Create PR in draft mode (applies only when creating)
+r    Mark draft PR ready (applies only when updating)
 
 Branch for an existing PR can be checked out by using the input flag p
 
@@ -266,7 +267,6 @@ SetVars()
 {
     echo "SetVars Start"
 
-
     # Check if PR exists for current branch
     if ! pr_view_output=$(gh pr view --json state,baseRefName --template '{{ .state }};;;{{ .baseRefName }}' 2>&1)
     then
@@ -283,7 +283,6 @@ SetVars()
     else
         status_base_branch=(${pr_view_output//;;;/ })
         status=${status_base_branch[0]}
-
         if [ "$status" == "CLOSED" ] || [ "$status" == "MERGED" ]
         then
             echo "Previous PR for the same branch merged or closed, can create PR"
@@ -304,8 +303,7 @@ SetVars()
           grep "${1}" ${file} | cut -d'=' -f2
       fi
     }
-    #Random change
-    #Another change
+
     # Override script default with script input, if not provided override with value in properties
     if [ -n "$pr_base_branch" ]
     then
@@ -390,6 +388,7 @@ ${normal}LintCheck: ${bold}$RunLintCheck
 ${normal}Squash: ${bold}$SquashCommits
 ${normal}KeepCurrentBranchAfterPR: ${bold}$KeepCurrentBranchAfterPr
 ${normal}RunTests: ${bold}$RunTests
+${normal}ExitEarly: ${bold}$ExitEarly
 
 ${normal}SetVars End"
 }
@@ -414,6 +413,12 @@ Run()
         Tests
     fi
 
+    if [ "$ExitEarly" = true ]
+    then
+        echo "Exiting early"
+        exit
+    fi
+
     if [ "$SquashCommits" = true ]
     then
         SquashCommits
@@ -435,7 +440,7 @@ Run()
 }
 
 # Main program
-while getopts "hlsktdrb:p:" option; do
+while getopts "hlsktdrxb:p:" option; do
     case $option in
         h)
             Help
@@ -460,6 +465,9 @@ while getopts "hlsktdrb:p:" option; do
         r)
             Input_Draft=false
             ReadyFromDraft=true;;
+
+        x)
+            ExitEarly=true;;
 
         b)
             Input_BaseBranch=$OPTARG;;

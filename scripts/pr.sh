@@ -4,6 +4,7 @@
 REMOTE="origin"
 RESTRICTED_BRANCHES=("develop")
 REVIEWERS=(ramitsuri)
+REPO="ramit-current/test.git"
 
 # Variables
 CreatingPr=false
@@ -90,7 +91,7 @@ SquashCommits()
 
     # We don't want to rewrite history if the branch exists on remote, so squash against
     # remote branch, otherwise against the base branch
-    if git ls-remote --exit-code --heads git@github.com:ramit-current/test.git refs/heads/"$current"
+    if git ls-remote --exit-code --heads git@github.com:"$REPO" refs/heads/"$current"
     then
         against="$REMOTE/$current"
     else
@@ -254,7 +255,10 @@ Tests()
 
     for c in "${test_commands[@]}"
     do
-        ./gradlew "$c"
+        if ! ./gradlew "$c";
+        then
+            exit $?
+        fi
     done
 }
 
@@ -438,11 +442,11 @@ while getopts "hlsktdrb:p:" option; do
             Input_RunTests=true;;
 
         d)
-            Draft=true
+            Input_Draft=true
             ReadyFromDraft=false;;
 
         r)
-            Draft=false
+            Input_Draft=false
             ReadyFromDraft=true;;
 
         b)

@@ -305,6 +305,7 @@ SetVars()
       fi
     }
     #Random change
+    #Another change
     # Override script default with script input, if not provided override with value in properties
     if [ -n "$pr_base_branch" ]
     then

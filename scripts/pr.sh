@@ -304,7 +304,7 @@ SetVars()
           grep "${1}" ${file} | cut -d'=' -f2
       fi
     }
-
+    #Random change
     # Override script default with script input, if not provided override with value in properties
     if [ -n "$pr_base_branch" ]
     then

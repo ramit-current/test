@@ -140,7 +140,7 @@ CreatePr()
     echo "CreatePr Start"
     title=$(git log -1 --format=%s)
     body=$(git log -1 --format=%b)
-    command='gh pr create -t '$title' -b '$body '--base '$BaseBranch '--assignee @me'
+    command='gh pr create -t '"$title"' -b '"$body"' --base '"$BaseBranch"' --assignee @me'
     if [ "$Draft" = true ]
     then
         command="$command --draft"

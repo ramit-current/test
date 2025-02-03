@@ -138,8 +138,8 @@ Push()
 CreatePr()
 {
     echo "CreatePr Start"
-    title=\'$(git log -1 --format=%s)\'
-    body=\'$(git log -1 --format=%b)\'
+    title=\"$(git log -1 --format=%s)\"
+    body=$(git log -1 --format=%b)
     command="gh pr create -t $title --base $BaseBranch --assignee @me"
     if [ "$Draft" = true ]
     then

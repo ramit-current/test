@@ -142,6 +142,8 @@ CreatePr()
     echo $title
     body=$(git log -1 --format=%b)
     command="gh pr create -t $title -b $body --base $BaseBranch --assignee @me"
+    echo "$command"
+    exit 1
     if [ "$Draft" = true ]
     then
         command="$command --draft"

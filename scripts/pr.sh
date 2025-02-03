@@ -150,7 +150,8 @@ CreatePr()
             reviewers_command="$reviewers_command --reviewer $reviewer"
         done
     fi
-
+    echo "gh pr create -t "$title" --base "$BaseBranch" --assignee @me "$reviewers_command" --body-file -"
+exit 1
     echo -e "$body" | gh pr create -t "$title" --base "$BaseBranch" --assignee @me "$reviewers_command" --body-file -
     echo "CreatePr End"
 }

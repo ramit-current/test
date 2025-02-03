@@ -140,8 +140,7 @@ CreatePr()
     echo "CreatePr Start"
     title=\'$(git log -1 --format=%s)\'
     body=\'$(git log -1 --format=%b)\'
-    command="gh pr create -t $title -b $body --base $BaseBranch --assignee @me"
-    echo "$command"
+    command="gh pr create -t $title --base $BaseBranch --assignee @me"
     if [ "$Draft" = true ]
     then
         command="$command --draft"
@@ -151,8 +150,10 @@ CreatePr()
             command="$command --reviewer $reviewer"
         done
     fi
+    command="$command --body-file -"
+    echo "$command"
 
-    $command
+    echo -e $body | $command
     echo "CreatePr End"
 }
 

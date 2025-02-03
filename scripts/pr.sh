@@ -153,7 +153,7 @@ CreatePr()
     command="$command --body-file -"
     echo "$command"
 
-    echo -e $body | $command
+    echo -e "$body" | $command
     echo "CreatePr End"
 }
 

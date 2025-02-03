@@ -140,18 +140,18 @@ CreatePr()
     echo "CreatePr Start"
     title=$(git log -1 --format=%s)
     body=$(git log -1 --format=%b)
-    create_mode_command=""
+    reviewers_command=""
     if [ "$Draft" = true ]
     then
-        create_mode_command="$create_mode_command --draft"
+        reviewers_command="$reviewers_command --draft"
     else
         for reviewer in "${REVIEWERS[@]}"
         do
-            create_mode_command="$create_mode_command --reviewer $reviewer"
+            reviewers_command="$reviewers_command --reviewer $reviewer"
         done
     fi
 
-    echo -e "$body" | gh pr create -t "$title" --base "$BaseBranch" --assignee @me --body-file -
+    echo -e "$body" | gh pr create "$reviewers_command" -t "$title" --base "$BaseBranch" --assignee @me --body-file -
     echo "CreatePr End"
 }
 

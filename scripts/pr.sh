@@ -151,6 +151,7 @@ CreatePr()
         done
     fi
     command="$command --body-file -"
+
     echo "$command"
 
     echo -e "$body" | $command

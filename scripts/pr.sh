@@ -186,7 +186,7 @@ PrintPrUrl()
     then
         return
     else
-        echo "$pr_view_output"
+        echo "$pr_url"
         exit 1
     fi
 }

@@ -182,11 +182,12 @@ ReadyPr()
 
 PrintPrUrl()
 {
-    if ! pr_view_output=$(gh pr view --json state --template '{{ .state }}' 2>&1)
+    if ! pr_url=$(gh pr view --json state --template '{{ .state }}' 2>&1)
     then
         return
     else
         echo "$pr_view_output"
+        exit 1
     fi
 }
 

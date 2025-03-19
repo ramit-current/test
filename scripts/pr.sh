@@ -8,7 +8,8 @@ REPO="ramit-current/test.git"
 
 # Variables
 CreatingPr=false
-BaseBranch="develop"
+BaseBranchDefault="develop"
+BaseBranch="$BaseBranchDefault"
 RunLintCheck=true
 SquashCommits=true
 KeepCurrentBranchAfterPr=false
@@ -97,7 +98,12 @@ SquashCommits()
     then
         against="$REMOTE/$current"
     else
-        against=$BaseBranch
+        if git show-ref --quiet refs/heads/"$BaseBranch";
+        then
+            against=$BaseBranch
+        else
+            against="$REMOTE/$BaseBranch"
+        fi
     fi
 
     echo "SquashCommits Start against $against"
@@ -191,7 +197,14 @@ CheckoutBaseBranchDeleteCurrent()
 
     echo "CheckoutBaseBranchDeleteCurrent Start"
 
-    if ! git checkout "$BaseBranch";
+    if git show-ref --quiet refs/heads/"$BaseBranch";
+    then
+        branchToCheckout="$BaseBranch"
+    else
+        echo "$BaseBranch not available locally, will checkout $BaseBranchDefault instead"
+        branchToCheckout="$BaseBranchDefault"
+    fi
+    if ! git checkout "$branchToCheckout";
     then
         exit $?
     fi

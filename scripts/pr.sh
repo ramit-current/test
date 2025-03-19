@@ -187,7 +187,6 @@ PrintPrUrl()
         return
     else
         echo "$pr_url"
-        exit 1
     fi
 }
 

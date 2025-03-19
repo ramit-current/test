@@ -97,7 +97,12 @@ SquashCommits()
     then
         against="$REMOTE/$current"
     else
-        against=$BaseBranch
+        if git show-ref --quiet refs/heads/"$BaseBranch";
+        then
+            against=$BaseBranch
+        else
+            against="$REMOTE/$BaseBranch"
+        fi
     fi
 
     echo "SquashCommits Start against $against"
@@ -152,6 +157,7 @@ CreatePr()
 
     title=$(git log -1 --format=%s)
     body=$(git log -1 --format=%b)
+    # Check can create or not if base branch not availble
     echo -e "$body" | gh pr create -t "$title" --base "$BaseBranch" --assignee @me $reviewers_command --body-file -
     echo "CreatePr End"
 }
@@ -191,6 +197,7 @@ CheckoutBaseBranchDeleteCurrent()
 
     echo "CheckoutBaseBranchDeleteCurrent Start"
 
+# Checkout develop if base branch not availble
     if ! git checkout "$BaseBranch";
     then
         exit $?

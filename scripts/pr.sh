@@ -180,6 +180,16 @@ ReadyPr()
     echo "ReadyPr End"
 }
 
+PrintPrUrl()
+{
+    if ! pr_view_output=$(gh pr view --json state --template '{{ .state }}' 2>&1)
+    then
+        return
+    else
+        echo "$pr_view_output"
+    fi
+}
+
 CheckoutBaseBranchDeleteCurrent()
 {
     current=$(git branch --show-current)
@@ -450,6 +460,8 @@ Run()
     elif [ "$ReadyFromDraft" = true ]
     then
         ReadyPr
+    else
+        PrintPrUrl
     fi
 
     CheckoutBaseBranchDeleteCurrent

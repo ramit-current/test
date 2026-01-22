@@ -1,0 +1,24 @@
+name: Label RC Pull Requests
+
+on:
+  pull_request:
+    types: [opened, synchronized, reopened, edited]
+    branches:
+      - rc  # Only trigger for PRs targeting the rc branch
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Add RC Label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['rc']
+            })

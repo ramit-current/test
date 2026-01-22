@@ -2,9 +2,7 @@ name: Label RC Pull Requests
 
 on:
   pull_request:
-    types: [opened, edited]
-    branches:
-      - rc  # Only trigger for PRs targeting the rc branch
+    types: [opened, reopened, edited]
 
 jobs:
   label:
@@ -16,9 +14,29 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
-            github.rest.issues.addLabels({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              labels: ['rc']
-            })
+            const labelName = 'rc';
+            const targetBranch = context.payload.pull_request.base.ref;
+            const currentLabels = context.payload.pull_request.labels.map(l => l.name);
+            const hasLabel = currentLabels.includes(labelName);
+
+            if (targetBranch === 'rc') {
+              if (!hasLabel) {
+                console.log("Target is RC, adding label.");
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  labels: [labelName]
+                });
+              }
+            } else {
+              if (hasLabel) {
+                console.log(`Target is ${targetBranch}, removing RC label.`);
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  name: labelName
+                });
+              }
+            }

@@ -29,6 +29,7 @@ jobs:
           git fetch origin develop:develop
           git checkout develop
           git pull origin develop
+          git log --oneline
           
           # Attempt to merge rc into develop
           if git merge origin/rc --no-ff -m "Autosync: Merge RC into Develop"; then

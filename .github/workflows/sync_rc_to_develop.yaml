@@ -26,6 +26,7 @@ jobs:
       - name: Merge RC into Develop
         run: |
           # Ensure we have the latest version of both branches
+          git fetch origin rc:rc
           git fetch origin develop:develop
           git checkout develop
           git pull origin develop

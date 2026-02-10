@@ -3,7 +3,7 @@
 # Constants
 REMOTE="origin"
 RESTRICTED_BRANCHES=("develop")
-REVIEWERS=(ramitsuri)
+REVIEWERS=(ramitsuri currentraghavkishan)
 REPO="ramit-current/test.git"
 
 # Variables

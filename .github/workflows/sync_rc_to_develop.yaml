@@ -13,17 +13,10 @@ jobs:
       pull-requests: write
     
     steps:
-      - name: Checkout rc
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           ref: rc
-          #token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Checkout develop
-        uses: actions/checkout@v4
-        with:
-          ref: develop
-          #token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Git
         run: |

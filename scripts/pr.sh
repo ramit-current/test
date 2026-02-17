@@ -3,7 +3,7 @@
 # Constants
 REMOTE="origin"
 RESTRICTED_BRANCHES=("develop")
-REVIEWERS=(ramitsuri currentraghavkishan)
+REVIEWERS_URL="repos/ramit-current/test/collaborators"
 REPO="ramit-current/test.git"
 
 # Variables
@@ -17,6 +17,7 @@ RunTests=false
 Draft=false
 ReadyFromDraft=false
 ExitEarly=false
+Reviewers=()
 
 Help()
 {
@@ -90,6 +91,8 @@ LintCheck()
 
 SquashCommits()
 {
+    local current against
+
     current=$(git branch --show-current)
 
     # We don't want to rewrite history if the branch exists on remote, so squash against
@@ -133,6 +136,8 @@ Commit()
 
 Push()
 {
+    local branch
+
     echo "Push Start"
     branch=$(git branch --show-current)
     if ! git push -u $REMOTE "$branch";
@@ -144,13 +149,16 @@ Push()
 
 CreatePr()
 {
+    local reviewers_command title body reviewer
+
     echo "CreatePr Start"
     reviewers_command=""
     if [ "$Draft" = true ]
     then
         reviewers_command="$reviewers_command --draft"
     else
-        for reviewer in "${REVIEWERS[@]}"
+        GetReviewers
+        for reviewer in "${Reviewers[@]}"
         do
             reviewers_command="$reviewers_command --reviewer $reviewer"
         done
@@ -164,14 +172,18 @@ CreatePr()
 
 ReadyPr()
 {
+    local command reviewer
+
     echo "ReadyPr Start"
     if ! gh pr ready;
     then
         exit $?
     fi
 
+    GetReviewers
+
     command="gh pr edit"
-    for reviewer in "${REVIEWERS[@]}"
+    for reviewer in "${Reviewers[@]}"
     do
        command="$command --add-reviewer $reviewer"
     done
@@ -182,6 +194,8 @@ ReadyPr()
 
 PrintPrUrl()
 {
+    local pr_url
+
     if ! pr_url=$(gh pr view --json url --template '{{ .url }}' 2>&1)
     then
         return
@@ -192,6 +206,8 @@ PrintPrUrl()
 
 CheckoutBaseBranchDeleteCurrent()
 {
+    local current branchToCheckout
+
     current=$(git branch --show-current)
 
     if [ "$current" == "$BaseBranch" ]
@@ -229,6 +245,8 @@ CheckoutBaseBranchDeleteCurrent()
 
 CheckoutBranchForPr()
 {
+    local prNumber branch
+
     if [ "$#" -ne 1 ]
     then
         echo "PR number not supplied"
@@ -255,6 +273,8 @@ CheckoutBranchForPr()
 
 CheckCurrentBranchRestricted()
 {
+    local return_value current restricted_branch
+
     return_value=0
     current=$(git branch --show-current)
 
@@ -270,12 +290,14 @@ CheckCurrentBranchRestricted()
 
 Tests()
 {
+    local test_commands c
     # If changing this list, update <project_root>/build-tools/cloud/scripts/cloud_run_unit_tests.sh as well
     test_commands=(
         app:testInternalDebugUnitTest
         common:testDebugUnitTest
         core:testDebugUnitTest
         data-models:testDebugUnitTest
+        network:grpc:testDebugUnitTest
         vde-sdk:testDebugUnitTest
         ui-components:testDebugUnitTest
     )
@@ -289,8 +311,24 @@ Tests()
     done
 }
 
+GetReviewers()
+{
+    echo "Getting reviewers from $REVIEWERS_URL"
+    while IFS= read -r line; do
+        Reviewers+=("$line")
+    done < <(gh api -X GET "$REVIEWERS_URL" --template '{{range .}}{{.login}}{{"\n"}}{{end}}')
+
+    if [ ${#Reviewers[@]} -eq 0 ];
+    then
+        echo "Unable to get reviewers"
+        exit 1
+    fi
+}
+
 SetVars()
 {
+    local pr_view_output status_base_branch status error_code pr_base_branch file bold normal creating_pr_text
+
     echo "SetVars Start"
 
     # Check if PR exists for current branch

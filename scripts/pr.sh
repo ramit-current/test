@@ -3,7 +3,7 @@
 # Constants
 REMOTE="origin"
 RESTRICTED_BRANCHES=("develop")
-REVIEWERS=(ramitsuri currentraghavkishan)
+REVIEWERS_URL="repos/ramit-current/test/collaborators"
 REPO="ramit-current/test.git"
 
 # Variables
@@ -150,6 +150,7 @@ CreatePr()
     then
         reviewers_command="$reviewers_command --draft"
     else
+        GetReviewers
         for reviewer in "${REVIEWERS[@]}"
         do
             reviewers_command="$reviewers_command --reviewer $reviewer"
@@ -171,6 +172,8 @@ ReadyPr()
     fi
 
     command="gh pr edit"
+
+    GetReviewers
     for reviewer in "${REVIEWERS[@]}"
     do
        command="$command --add-reviewer $reviewer"
@@ -287,6 +290,22 @@ Tests()
             exit $?
         fi
     done
+}
+
+GetReviewers()
+{
+    echo "GetReviewers Start"
+    REVIEWERS=()
+    while IFS= read -r line; do
+        REVIEWERS+=("$line")
+    done < <(gh api -X GET "$REVIEWERS_URL" --jq ".[].login")
+
+    if [ ${#REVIEWERS[@]} -eq 0 ];
+    then
+        echo "Unable to get reviewers"
+        exit 1
+    fi
+    echo "GetReviewers End"
 }
 
 SetVars()

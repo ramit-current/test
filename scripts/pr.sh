@@ -213,29 +213,29 @@ MergePr()
     echo "Fetching PR details for merging"
 
     # Extract title, body, and branch being merged using gh templates
-    # The format uses a unique delimiter (;;;) so we can split the single output line into an array
     local pr_data
-    if ! pr_data=$(gh pr view "$prNumber" --json title,body,headRefName --template '{{.title}};;;{{.body}};;;{{.headRefName}}' 2>&1)
+    if ! pr_data=$(gh pr view "$prNumber" --json title,body,headRefName --template '{{.title}};;;;{{.body}};;;;{{.headRefName}}' 2>&1)
     then
         echo "Error: Could not find pull request"
         exit 1
     fi
 
     # Split the template output into variables
-    IFS=";;;" read -r title body branch_being_merged <<< "$pr_data"
+    title=$(awk 'BEGIN{RS=""}{split($0,a,";;;;")} END{printf "%s", a[1]}' <<< "$pr_data")
+    body=$(awk 'BEGIN{RS=""}{split($0,a,";;;;")} END{printf "%s", a[2]}' <<< "$pr_data")
+    branch_being_merged=$(awk 'BEGIN{RS=""}{split($0,a,";;;;")} END{printf "%s", a[3]}' <<< "$pr_data")
 
     merge_args=("--subject" "$title" "--body" "$body")
 
-    case "$branch_being_merged" in
-        "master"|"rc"|"develop")
-            echo "Merging a protected branch ($branch_being_merged). Will merge without squashing"
-            merge_args+=("--merge")
-            ;;
-        *)
-            echo "Merging $branch_being_merged. Will squash commits and delete the remote branch"
-            merge_args+=("--squash" "--delete-branch")
-            ;;
-    esac
+    if CheckCurrentBranchRestricted "$branch_being_merged";
+    then
+        # If check passed, which means branch is not restricted
+        echo "Merging $branch_being_merged. Will squash commits and delete the remote branch."
+        merge_args+=("--squash" "--delete-branch")
+    else
+        echo "Merging a restricted branch ($branch_being_merged). Will merge without squashing."
+        merge_args+=("--merge")
+    fi
 
     gh pr merge "$prNumber" "${merge_args[@]}"
 }
@@ -261,7 +261,7 @@ CheckoutBaseBranchDeleteCurrent()
     if [ "$current" == "$BaseBranch" ]
     then
         return
-    elif ! CheckCurrentBranchRestricted;
+    elif ! CheckCurrentBranchRestricted "$current";
     then
         return
     elif [ "$KeepCurrentBranchAfterPr" = true ]
@@ -319,17 +319,19 @@ CheckoutBranchForPr()
     fi
 }
 
+# Checks if provided branch is restricted. If no branch is provided, it checks the current branch.
 CheckCurrentBranchRestricted()
 {
-    local return_value current restricted_branch
+    local return_value branch_to_check restricted_branch
 
+    branch_to_check="${1:-$(git branch --show-current)}"
     return_value=0
-    current=$(git branch --show-current)
 
     for restricted_branch in "${RESTRICTED_BRANCHES[@]}"
     do
-        if [ "$current" == "$restricted_branch" ] ; then
+        if [ "$branch_to_check" == "$restricted_branch" ] ; then
             return_value=1
+            break
         fi
     done
 

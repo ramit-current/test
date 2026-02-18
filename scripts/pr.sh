@@ -2,7 +2,7 @@
 
 # Constants
 REMOTE="origin"
-RESTRICTED_BRANCHES=("develop")
+RESTRICTED_BRANCHES=(develop rc)
 REVIEWERS_URL="repos/ramit-current/test/collaborators"
 REPO="ramit-current/test.git"
 
@@ -32,6 +32,8 @@ Including
 - push changes to remote
 - create PR on GitHub. GitHub CLI should be installed and authenticated
 - checkout BaseBranch and delete branch from which PR was created
+- checkout branch for PR using the PR number
+- merge a PR
 
 Override for the defaults can be provided via a pr.properties txt file in the project's root directory or via input flags to the script
 
@@ -43,8 +45,10 @@ t    Run tests when creating or updating PR
 d    Create PR in draft mode (applies only when creating)
 r    Mark draft PR ready (applies only when updating)
 x    Exit early, without pushing any changes to the repository. Useful for running tests, formatting
-
-Branch for an existing PR can be checked out by using the input flag p
+p    Checkout branch for an existing PR using the PR number
+m    Merge a PR using the PR number or the PR associated with the current branch, if PR number is not provided.
+     When merging one of the mainline branches into another branch, the commits aren't squashed because we mostly do this when creating releases and want to retain all of the commit history.
+     Commits are squashed for other PRs however, and the remote branch is deleted after the merge.
 
 Example pr.properties file
 
@@ -76,7 +80,10 @@ Create PR against feature-test branch
 Create or update PR and keep the PR branch
 
 ./scripts/pr.sh -p 999
-Checkout the remote branch associated with the PR number 999"
+Checkout the remote branch associated with the PR number 999
+
+./scripts/pr.sh -m 999
+Merge PR #999"
 }
 
 LintCheck()
@@ -190,6 +197,47 @@ ReadyPr()
 
     $command
     echo "ReadyPr End"
+}
+
+MergePr()
+{
+    local prNumber
+
+    if [ "$#" -ne 1 ]
+    then
+        echo "PR number not supplied"
+        exit
+    fi
+    prNumber=$1
+
+    echo "Fetching PR details for merging"
+
+    # Extract title, body, and branch being merged using gh templates
+    # The format uses a unique delimiter (;;;) so we can split the single output line into an array
+    local pr_data
+    if ! pr_data=$(gh pr view "$prNumber" --json title,body,headRefName --template '{{.title}};;;{{.body}};;;{{.headRefName}}' 2>&1)
+    then
+        echo "Error: Could not find pull request"
+        exit 1
+    fi
+
+    # Split the template output into variables
+    IFS=";;;" read -r title body branch_being_merged <<< "$pr_data"
+
+    merge_args=("--subject" "$title" "--body" "$body")
+
+    case "$branch_being_merged" in
+        "master"|"rc"|"develop")
+            echo "Merging a protected branch ($branch_being_merged). Will merge without squashing"
+            merge_args+=("--merge")
+            ;;
+        *)
+            echo "Merging $branch_being_merged. Will squash commits and delete the remote branch"
+            merge_args+=("--squash" "--delete-branch")
+            ;;
+    esac
+
+    gh pr merge "$prNumber" "${merge_args[@]}"
 }
 
 PrintPrUrl()
@@ -506,7 +554,7 @@ Run()
 }
 
 # Main program
-while getopts "hlsktdrxb:p:" option; do
+while getopts "hlsktdrxb:p:m:" option; do
     case $option in
         h)
             Help
@@ -540,6 +588,10 @@ while getopts "hlsktdrxb:p:" option; do
 
         p)
             CheckoutBranchForPr "$OPTARG"
+            exit;;
+
+        m)
+            MergePr "$OPTARG"
             exit;;
 
         \?)

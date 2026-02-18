@@ -201,7 +201,7 @@ ReadyPr()
 
 MergePr()
 {
-    local prNumber branch
+    local prNumber
 
     if [ "$#" -ne 1 ]
     then

@@ -3,7 +3,7 @@
 # Constants
 REMOTE="origin"
 RESTRICTED_BRANCHES=("develop")
-REVIEWERS=(ramitsuri currentraghavkishan)
+REVIEWERS_URL="repos/ramit-current/test/collaborators"
 REPO="ramit-current/test.git"
 
 # Variables
@@ -17,6 +17,7 @@ RunTests=false
 Draft=false
 ReadyFromDraft=false
 ExitEarly=false
+Reviewers=()
 
 Help()
 {
@@ -31,6 +32,8 @@ Including
 - push changes to remote
 - create PR on GitHub. GitHub CLI should be installed and authenticated
 - checkout BaseBranch and delete branch from which PR was created
+- checkout branch for PR using the PR number
+- merge a PR
 
 Override for the defaults can be provided via a pr.properties txt file in the project's root directory or via input flags to the script
 
@@ -42,8 +45,10 @@ t    Run tests when creating or updating PR
 d    Create PR in draft mode (applies only when creating)
 r    Mark draft PR ready (applies only when updating)
 x    Exit early, without pushing any changes to the repository. Useful for running tests, formatting
-
-Branch for an existing PR can be checked out by using the input flag p
+p    Checkout branch for an existing PR using the PR number
+m    Merge a PR using the PR number or the PR associated with the current branch, if PR number is not provided.
+     When merging one of the mainline branches into another branch, the commits aren't squashed because we mostly do this when creating releases and want to retain all of the commit history.
+     Commits are squashed for other PRs however, and the remote branch is deleted after the merge.
 
 Example pr.properties file
 
@@ -75,7 +80,10 @@ Create PR against feature-test branch
 Create or update PR and keep the PR branch
 
 ./scripts/pr.sh -p 999
-Checkout the remote branch associated with the PR number 999"
+Checkout the remote branch associated with the PR number 999
+
+./scripts/pr.sh -m 999
+Merge PR #999"
 }
 
 LintCheck()
@@ -90,6 +98,8 @@ LintCheck()
 
 SquashCommits()
 {
+    local current against
+
     current=$(git branch --show-current)
 
     # We don't want to rewrite history if the branch exists on remote, so squash against
@@ -133,6 +143,8 @@ Commit()
 
 Push()
 {
+    local branch
+
     echo "Push Start"
     branch=$(git branch --show-current)
     if ! git push -u $REMOTE "$branch";
@@ -144,13 +156,16 @@ Push()
 
 CreatePr()
 {
+    local reviewers_command title body reviewer
+
     echo "CreatePr Start"
     reviewers_command=""
     if [ "$Draft" = true ]
     then
         reviewers_command="$reviewers_command --draft"
     else
-        for reviewer in "${REVIEWERS[@]}"
+        GetReviewers
+        for reviewer in "${Reviewers[@]}"
         do
             reviewers_command="$reviewers_command --reviewer $reviewer"
         done
@@ -164,14 +179,18 @@ CreatePr()
 
 ReadyPr()
 {
+    local command reviewer
+
     echo "ReadyPr Start"
     if ! gh pr ready;
     then
         exit $?
     fi
 
+    GetReviewers
+
     command="gh pr edit"
-    for reviewer in "${REVIEWERS[@]}"
+    for reviewer in "${Reviewers[@]}"
     do
        command="$command --add-reviewer $reviewer"
     done
@@ -180,8 +199,43 @@ ReadyPr()
     echo "ReadyPr End"
 }
 
+MergePr() {
+    local pr_num=$1
+    # If no identifier provided, gh pr view/merge defaults to current branch
+    echo "Fetching PR details for merging"
+
+    # Extract title, body, and branch being merged using gh templates
+    # The format uses a unique delimiter (;;;) so we can split the single output line into an array
+    local pr_data
+    if ! pr_data=$(gh pr view "$pr_num" --json title,body,headRefName --template '{{.title}};;;{{.body}};;;{{.headRefName}}' 2>&1)
+    then
+        echo "Error: Could not find pull request"
+        exit 1
+    fi
+
+    # Split the template output into variables
+    IFS=";;;" read -r title body branch_being_merged <<< "$pr_data"
+
+    merge_args=("--subject" "$title" "--body" "$body")
+
+    case "$branch_being_merged" in
+        "master"|"rc"|"develop")
+            echo "Merging a protected branch ($branch_being_merged). Will merge without squashing"
+            merge_args+=("--merge")
+            ;;
+        *)
+            echo "Merging $branch_being_merged. Will squash commits and delete the remote branch"
+            merge_args+=("--squash" "--delete-branch")
+            ;;
+    esac
+
+    gh pr merge "$pr_num" "${merge_args[@]}"
+}
+
 PrintPrUrl()
 {
+    local pr_url
+
     if ! pr_url=$(gh pr view --json url --template '{{ .url }}' 2>&1)
     then
         return
@@ -192,6 +246,8 @@ PrintPrUrl()
 
 CheckoutBaseBranchDeleteCurrent()
 {
+    local current branchToCheckout
+
     current=$(git branch --show-current)
 
     if [ "$current" == "$BaseBranch" ]
@@ -229,6 +285,8 @@ CheckoutBaseBranchDeleteCurrent()
 
 CheckoutBranchForPr()
 {
+    local prNumber branch
+
     if [ "$#" -ne 1 ]
     then
         echo "PR number not supplied"
@@ -255,6 +313,8 @@ CheckoutBranchForPr()
 
 CheckCurrentBranchRestricted()
 {
+    local return_value current restricted_branch
+
     return_value=0
     current=$(git branch --show-current)
 
@@ -270,12 +330,14 @@ CheckCurrentBranchRestricted()
 
 Tests()
 {
+    local test_commands c
     # If changing this list, update <project_root>/build-tools/cloud/scripts/cloud_run_unit_tests.sh as well
     test_commands=(
         app:testInternalDebugUnitTest
         common:testDebugUnitTest
         core:testDebugUnitTest
         data-models:testDebugUnitTest
+        network:grpc:testDebugUnitTest
         vde-sdk:testDebugUnitTest
         ui-components:testDebugUnitTest
     )
@@ -289,8 +351,24 @@ Tests()
     done
 }
 
+GetReviewers()
+{
+    echo "Getting reviewers from $REVIEWERS_URL"
+    while IFS= read -r line; do
+        Reviewers+=("$line")
+    done < <(gh api -X GET "$REVIEWERS_URL" --template '{{range .}}{{.login}}{{"\n"}}{{end}}')
+
+    if [ ${#Reviewers[@]} -eq 0 ];
+    then
+        echo "Unable to get reviewers"
+        exit 1
+    fi
+}
+
 SetVars()
 {
+    local pr_view_output status_base_branch status error_code pr_base_branch file bold normal creating_pr_text
+
     echo "SetVars Start"
 
     # Check if PR exists for current branch
@@ -468,7 +546,7 @@ Run()
 }
 
 # Main program
-while getopts "hlsktdrxb:p:" option; do
+while getopts "hlsktdrxb:p:m:" option; do
     case $option in
         h)
             Help
@@ -502,6 +580,10 @@ while getopts "hlsktdrxb:p:" option; do
 
         p)
             CheckoutBranchForPr "$OPTARG"
+            exit;;
+
+        m)
+            MergePr "$OPTARG"
             exit;;
 
         \?)

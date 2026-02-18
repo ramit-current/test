@@ -199,15 +199,23 @@ ReadyPr()
     echo "ReadyPr End"
 }
 
-MergePr() {
-    local pr_num=$1
-    # If no identifier provided, gh pr view/merge defaults to current branch
+MergePr()
+{
+    local prNumber branch
+
+    if [ "$#" -ne 1 ]
+    then
+        echo "PR number not supplied"
+        exit
+    fi
+    prNumber=$1
+
     echo "Fetching PR details for merging"
 
     # Extract title, body, and branch being merged using gh templates
     # The format uses a unique delimiter (;;;) so we can split the single output line into an array
     local pr_data
-    if ! pr_data=$(gh pr view "$pr_num" --json title,body,headRefName --template '{{.title}};;;{{.body}};;;{{.headRefName}}' 2>&1)
+    if ! pr_data=$(gh pr view "$prNumber" --json title,body,headRefName --template '{{.title}};;;{{.body}};;;{{.headRefName}}' 2>&1)
     then
         echo "Error: Could not find pull request"
         exit 1
@@ -229,7 +237,7 @@ MergePr() {
             ;;
     esac
 
-    gh pr merge "$pr_num" "${merge_args[@]}"
+    gh pr merge "$prNumber" "${merge_args[@]}"
 }
 
 PrintPrUrl()

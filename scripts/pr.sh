@@ -2,7 +2,7 @@
 
 # Constants
 REMOTE="origin"
-RESTRICTED_BRANCHES=("develop")
+RESTRICTED_BRANCHES=(develop rc)
 REVIEWERS_URL="repos/ramit-current/test/collaborators"
 REPO="ramit-current/test.git"
 

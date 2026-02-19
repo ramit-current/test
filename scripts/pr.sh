@@ -214,16 +214,27 @@ MergePr()
 
     # Extract title, body, and branch being merged using gh templates
     local pr_data
-    if ! pr_data=$(gh pr view "$prNumber" --json title,body,headRefName --template '{{.title}};;;;{{.body}};;;;{{.headRefName}}' 2>&1)
+    if ! pr_data=$(gh pr view "$prNumber" --json title,body,headRefName --template '{{.headRefName}};;;;{{.title}};;;;{{.body}}' 2>&1)
     then
         echo "Error: Could not find pull request"
         exit 1
     fi
-
     # Split the template output into variables
-    title=$(awk 'BEGIN{RS=""}{split($0,a,";;;;")} END{printf "%s", a[1]}' <<< "$pr_data")
-    body=$(awk 'BEGIN{RS=""}{split($0,a,";;;;")} END{printf "%s", a[2]}' <<< "$pr_data")
-    branch_being_merged=$(awk 'BEGIN{RS=""}{split($0,a,";;;;")} END{printf "%s", a[3]}' <<< "$pr_data")
+    remainder="$pr_data"
+
+    branch_being_merged="${remainder%%;;;;*}"
+    remainder="${remainder#*;;;;}"
+
+    title="${remainder%%;;;;*}"
+    body="${remainder#*;;;;}"
+
+    echo "---"
+    echo "$title"
+    echo "---"
+    echo "$body"
+    echo "---"
+    echo "$branch_being_merged"
+    echo "---"
 
     merge_args=("--subject" "$title" "--body" "$body")
 

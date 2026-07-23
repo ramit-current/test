@@ -5,6 +5,7 @@ REMOTE="origin"
 RESTRICTED_BRANCHES=(develop rc)
 REVIEWERS_URL="repos/ramit-current/test/collaborators"
 REPO="ramit-current/test.git"
+REPO_WITHOUT_GIT="ramit-current/test"
 
 # Variables
 CreatingPr=false
@@ -283,7 +284,7 @@ ${normal}"
         echo "Merge cancelled"
         exit 0
     fi
-
+    set -x
     gh pr merge "$prNumber" "${merge_args[@]}"
     if [ "$delete_branch" = true ]
     then
@@ -292,7 +293,7 @@ ${normal}"
         do
             gh pr edit "$number" --base "$base_branch"
         done
-        gh api -X DELETE repos/"$REPO"/git/refs/heads/"$branch_being_merged"
+        gh api -X DELETE repos/"$REPO_WITHOUT_GIT"/git/refs/heads/"$branch_being_merged"
     fi
 }
 

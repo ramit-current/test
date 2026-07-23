@@ -46,7 +46,7 @@ d    Create PR in draft mode (applies only when creating)
 r    Mark draft PR ready (applies only when updating)
 x    Exit early, without pushing any changes to the repository. Useful for running tests, formatting
 p    Checkout branch for an existing PR using the PR number
-m    Merge a PR using the PR number or the PR associated with the current branch, if PR number is not provided.
+m    Merge a PR using the PR number.
      When merging one of the mainline branches into another branch, the commits aren't squashed because we mostly do this when creating releases and want to retain all of the commit history.
      Commits are squashed for other PRs however, and the remote branch is deleted after the merge.
 
@@ -201,54 +201,99 @@ ReadyPr()
 
 MergePr()
 {
-    local prNumber
+    local prNumber remainder branch_being_merged base_branch title body merge_args pr_data reviewDecision author squash delete_branch response bold normal
 
     if [ "$#" -ne 1 ]
     then
         echo "PR number not supplied"
-        exit
+        exit 1
     fi
     prNumber=$1
 
     echo "Fetching PR details for merging"
 
     # Extract title, body, and branch being merged using gh templates
-    local pr_data
-    if ! pr_data=$(gh pr view "$prNumber" --json title,body,headRefName --template '{{.headRefName}};;;;{{.title}};;;;{{.body}}' 2>&1)
+    if ! pr_data=$(gh pr view "$prNumber" --json title,body,headRefName,baseRefName,reviewDecision,author --template '{{.headRefName}};;;;{{.baseRefName}};;;;{{.title}};;;;{{.body}};;;;{{.reviewDecision}};;;;{{.author.name}}' 2>&1)
     then
         echo "Error: Could not find pull request"
         exit 1
     fi
+
     # Split the template output into variables
     remainder="$pr_data"
 
     branch_being_merged="${remainder%%;;;;*}"
     remainder="${remainder#*;;;;}"
 
-    title="${remainder%%;;;;*}"
-    body="${remainder#*;;;;}"
+    base_branch="${remainder%%;;;;*}"
+    remainder="${remainder#*;;;;}"
 
-    echo "---"
-    echo "$title"
-    echo "---"
-    echo "$body"
-    echo "---"
-    echo "$branch_being_merged"
-    echo "---"
+    title="${remainder%%;;;;*}"
+    remainder="${remainder#*;;;;}"
+
+    body="${remainder%%;;;;*}"
+    remainder="${remainder#*;;;;}"
+
+    reviewDecision="${remainder%%;;;;*}"
+    remainder="${remainder#*;;;;}"
+
+    author="$remainder"
 
     merge_args=("--subject" "$title" "--body" "$body")
 
     if CheckCurrentBranchRestricted "$branch_being_merged";
     then
-        # If check passed, which means branch is not restricted
-        echo "Merging $branch_being_merged. Will squash commits and delete the remote branch."
-        merge_args+=("--squash" "--delete-branch")
+        squash=true
+        delete_branch=true
+        if [ "$Input_SquashCommits" = false ]
+        then
+            squash=false
+        fi
+        if [ "$Input_KeepCurrentBranchAfterPr" = true ]
+        then
+            delete_branch=false
+        fi
     else
-        echo "Merging a restricted branch ($branch_being_merged). Will merge without squashing."
+        squash=false
+        delete_branch=false
+    fi
+
+    if [ "$squash" = true ]
+    then
+        merge_args+=("--squash")
+    else
         merge_args+=("--merge")
     fi
 
+    bold=$(tput bold)
+    normal=$(tput sgr0)
+
+    echo "
+${normal}PR:              ${bold}#$prNumber
+${normal}Title:           ${bold}$title
+${normal}Author:          ${bold}$author
+${normal}Branch:          ${bold}$branch_being_merged ${normal}into ${bold}$base_branch
+${normal}Review Decision: ${bold}$reviewDecision
+${normal}Squash Commits:  ${bold}$squash
+${normal}Delete Branch:   ${bold}$delete_branch
+${normal}"
+    read -r -p "Proceed with merge? [y/N] " response
+    if [[ ! "$response" =~ ^[Yy]$ ]]
+    then
+        echo "Merge cancelled"
+        exit 0
+    fi
+
     gh pr merge "$prNumber" "${merge_args[@]}"
+    if [ "$delete_branch" = true ]
+    then
+        numbers=$(gh pr list --base "$branch_being_merged" --limit 100 --json number --jq '.[].number')
+        for number in ${numbers[@]}
+        do
+            gh pr edit "$number" --base "$base_branch"
+        done
+        gh api -X DELETE repos/"$REPO"/git/refs/heads/"$branch_being_merged"
+    fi
 }
 
 PrintPrUrl()
@@ -309,7 +354,7 @@ CheckoutBranchForPr()
     if [ "$#" -ne 1 ]
     then
         echo "PR number not supplied"
-        exit
+        exit 1
     fi
     prNumber=$1
 
@@ -355,7 +400,8 @@ Tests()
     # If changing this list, update <project_root>/build-tools/cloud/scripts/cloud_run_unit_tests.sh as well
     test_commands=(
         app:testInternalDebugUnitTest
-        common:testDebugUnitTest
+        common-data:testDebugUnitTest
+        common-utils:testDebugUnitTest
         core:testDebugUnitTest
         data-models:testDebugUnitTest
         network:grpc:testDebugUnitTest
